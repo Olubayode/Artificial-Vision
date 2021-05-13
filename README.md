@@ -42,6 +42,8 @@ The inspiratioe of using this model comes from the related work done by Gunnarss
 
 
 
+                                              FILES
+
 [object_detection.zip](https://github.com/Olubayode/Artificial-Vision/files/6473599/object_detection.zip)
 
 
