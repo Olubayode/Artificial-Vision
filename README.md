@@ -41,3 +41,7 @@ Not to say it is proven to be the best, but it looks promising and will therefor
 The inspiratioe of using this model comes from the related work done by Gunnarsson
 
 
+
+[object_detection.zip](https://github.com/Olubayode/Artificial-Vision/files/6473599/object_detection.zip)
+
+
