@@ -1,0 +1,350 @@
+These are the pre trained files used for the projects# import matplotlib
+# matplotlib.use('TkAgg')
+# import matplotlib.pyplot as plt
+
+# import warnings
+# warnings.filterwarnings('ignore')
+
+# import io
+# import glob
+# import scipy.misc
+# import numpy as np
+# from six import BytesIO
+# from PIL import Image, ImageDraw, ImageFont
+
+import tensorflow as tf
+
+import os, sys
+import pyttsx3
+import schedule
+import time
+
+# os.environ['PYTHONPATH'] += "./models"
+
+# import sys
+# sys.path.append("./models")s
+
+
+from object_detection.utils import label_map_util
+from object_detection.utils import config_util
+from object_detection.utils import visualization_utils as viz_utils
+from object_detection.builders import model_builder
+
+def count():
+  occurences = description.count('person')
+  print(occurences)
+
+
+def load_image_into_numpy_array(image):
+  """Load an image from file into a numpy array.
+  Puts image into numpy array to feed into tensorflow graph.
+  Note that by convention we put it into a numpy array with shape
+  (height, width, channels), where channels=3 for RGB.
+  Args:
+    path: the file path to the image
+  Returns:
+    uint8 numpy array with shape (img_height, img_width, 3)
+  """
+  #img_data = tf.io.gfile.GFile(path, 'rb').read()
+  #image = Image.open(BytesIO(img_data))
+  (im_width, im_height, channel) = image.shape
+  return image.astype(np.uint8)
+
+
+  #recover our saved model
+#pipeline_config = './ssd_mobilenet_v2_fpnlite_640x640_coco17_tpu-8/ssd_mobilenet_v2_fpnlite_640x640_coco17_tpu-8.config'
+pipeline_config = '/home/ebenezer/models/research/object_detection/configs/tf2/ssd_mobilenet_v2_fpnlite_640x640_coco17_tpu-8.config'
+#pipeline_config = '/home/ebenezer/models/research/object_detection/ssd_mobilenet_v2_fpnlite_640x640_coco17_tpu-8/pipeline.config'
+#generally you want to put the last ckpt from training in here
+model_dir = 'ckpt-0'
+print(os.getcwd())
+configs = config_util.get_configs_from_pipeline_file(pipeline_config)
+model_config = configs['model']
+detection_model = model_builder.build(
+      model_config=model_config, is_training=False)
+#tf.train.Checkpoint.restore(...).expect_partial()
+#model.load_weights(...).expect_partial()
+
+# # Restore checkpoint
+ckpt = tf.compat.v2.train.Checkpoint(
+      model=detection_model)
+#path = ckpt.write('/home/ebenezer/models/research/object_detection/ssd_mobilenet_v2_fpnlite_640x640_coco17_tpu-8/checkpoint/ckpt-0')
+#ckpt = tf.train.Checkpoint.restore('model').expect_partial()
+ckpt.restore('/home/ebenezer/models/research/object_detection/ssd_mobilenet_v2_fpnlite_640x640_coco17_tpu-8/checkpoint/ckpt-0')
+#ckpt.restore(os.path.join('ckpt-0'))
+
+def get_model_detection_function(model):
+  """Get a tf.function for detection."""
+
+  @tf.function
+  def detect_fn(image):
+    """Detect objects in image."""
+
+    image, shapes = model.preprocess(image)
+    prediction_dict = model.predict(image, shapes)
+    detections = model.postprocess(prediction_dict, shapes)
+
+    return detections, prediction_dict, tf.reshape(shapes, [-1])
+ 
+  return detect_fn
+
+detect_fn = get_model_detection_function(detection_model)
+
+
+#map labels for inference decoding
+#label_map_path = configs['eval_input_config'].label_map_path
+label_map_path = '/home/ebenezer/models/research/object_detection/data/mscoco_label_map.pbtxt'
+label_map = label_map_util.load_labelmap(label_map_path)
+categories = label_map_util.convert_label_map_to_categories(
+    label_map,
+    max_num_classes=label_map_util.get_max_label_map_index(label_map),
+    use_display_name=True)
+category_index = label_map_util.create_category_index(categories)
+# print(category_index)
+label_map_dict = label_map_util.get_label_map_dict(label_map, use_display_name=True)
+keys = label_map_dict.keys()
+#topg= list(category_index.keys())
+# print(topg)
+#print(label_map_dict)
+# category_index ={}
+# for cat in categories:
+#   category_index[cat['name']] = cat
+#   print(cat['name'])
+
+#keys = label_map_util.get_label_map_dict(label_map, use_display_name=True)
+
+import random
+import numpy as np
+import cv2
+import tensorflow as tf
+import speech_recognition as sr
+from gtts import gTTS
+
+
+FPS = 0
+
+cap = cv2.VideoCapture(0)
+# Define the codec and create VideoWriter object
+fourcc = cv2.VideoWriter_fourcc(*'XVID')
+out = cv2.VideoWriter('stb_out.avi',fourcc, 20.0, (640,480))
+# start = time.time()
+while(True):
+
+    FPS += 1
+    # Capture frame-by-frame
+    
+    ret,image_np = cap.read()
+    image_np = load_image_into_numpy_array(image_np)
+
+    input_tensor = tf.convert_to_tensor(
+    np.expand_dims(image_np, 0), dtype=tf.float32)
+    
+
+    detections, predictions_dict, shapes = detect_fn(input_tensor)
+
+    label_id_offset = 1
+    image_np_with_detections = image_np.copy()
+    
+    viz_utils.visualize_boxes_and_labels_on_image_array(
+          image_np_with_detections,
+          detections['detection_boxes'][0].numpy(),
+          (detections['detection_classes'][0].numpy() + label_id_offset).astype(int),
+          detections['detection_scores'][0].numpy(),
+          category_index,
+          use_normalized_coordinates=True,
+          max_boxes_to_draw=200,
+          min_score_thresh=.5,
+          agnostic_mode=False,
+
+
+
+    )
+
+    aja = viz_utils.print_class_names_into_list(
+          image_np_with_detections,
+          detections['detection_boxes'][0].numpy(),
+          (detections['detection_classes'][0].numpy() + label_id_offset).astype(int),
+          detections['detection_scores'][0].numpy(),
+          category_index,
+          agnostic_mode=False,
+          max_boxes_to_draw=20,)  
+
+
+    print(aja) 
+
+    # aja = viz_utils.visualize_boxes_and_labels_on_image_array(
+    #       image_np_with_detections,
+    #       detections['detection_boxes'][0].numpy(),
+    #       (detections['detection_classes'][0].numpy() + label_id_offset).astype(int),
+    #       detections['detection_scores'][0].numpy(),
+    #       category_index,
+    #       use_normalized_coordinates=True,
+    #       max_boxes_to_draw=200,
+    #       min_score_thresh=.5,
+    #       agnostic_mode=False,)
+
+    # print(aja)
+
+
+    # list1 = []
+
+    # for i in detections['detection_classes']:
+    #   if detections['detection_classes'] in category_index:
+    #     class_name = category_index[classes[i]]['name']
+    #     list1.append(class_name)
+
+    # print(list1)
+
+
+
+  
+#https://colab.research.google.com/github/trekhleb/machine-learning-experiments/blob/master/experiments/objects_detection_ssdlite_mobilenet_v2/objects_detection_ssdlite_mobilenet_v2.ipynb#scrollTo=lf0PgVxdjfUr
+
+
+
+    # if len (detections['detection_boxes']) > 0:
+    #   list1 = []
+    #   for i in (detections['detection_boxes']):
+    #     (x, y) = (detections['detection_boxes'][0], detections['detection_boxes'][i][1])
+    #     (w, h) = (detections['detection_boxes'][i][2].numpy(), detections['detection_boxes'][i][3].numpy())
+    #     centerx = round((2*x + w)/2)
+    #     centery = round((2*y + h)/2)
+    #     if centerX <= W/3:
+    #       W_pos = "left "
+    #     elif centerX <= (W/3 * 2):
+    #       W_pos = "center "
+    #     else:
+    #       W_pos = "right "
+    #       if centerY <= H/3:
+    #         H_pos = "top "
+    #       elif centerY <= (H/3 * 2):
+    #         H_pos = "mid "
+    #       else:
+    #         H_pos = "bottom "
+    #       list1.append(H_pos + W_pos + label_map_dict[i])
+
+    #   description = ', '.join(list1)
+    # print((detections['detection_classes'][0].numpy()).astype(int))
+    #print(input_tensor[0])
+
+    # for i in label_map_dict.keys():
+    #   if category_index == label_map_dict.values():
+    #     i == label_map_dict.values()
+
+    
+
+
+
+    # myobj = gTTS(text= aja + 'detected', lang="en", slow=False)
+    # myobj = gTTS(text= aja , lang="en", slow=False)
+
+    # myobj.save("object_detected.mp3")
+
+    #print(detections['detection_boxes'])
+    #print(detections['detection_classes'])
+    # print(label_map_dict)
+    # for i in label_map_dict.keys():
+    #   print(i)
+    # keys = label_map_dict.keys()
+    #print(keys)
+    #print(category_index)
+    # description = str(', '.join(aja))
+    # myobj = gTTS(text=description, lang="en", slow=False)
+    # os.system('mpg321 object_detection.mp3')
+    # myobj.save("object_detection.mp3")
+
+
+    # Display the resulting frame
+    out.write(image_np_with_detections)
+    cv2.imshow('frame',image_np_with_detections)
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+      break
+    # end = time.time()  
+    description = str(', '.join(aja))
+    engine = pyttsx3.init()
+    if description and FPS == 20:
+      # schedule.every(5).minutes.do(count)
+      # engine.say(f' total number of {count} person detected')
+      # while 1:
+      # occurences = description.count('person')
+      # print(occurences)
+      # engine = pyttsx3.init()
+      # print(FPS)
+      engine.say(f'{description} dectected')
+      occurences = description.count('person')
+      print(f'{occurences} person detected')
+      if occurences == 1 and 0:
+        #time.sleep(1)
+        engine.say(f'total number of {occurences} person detected')
+      else:
+        #time.sleep(1)
+        engine.say(f'total number of {occurences} persons detected')
+      # engine.setProperty('rate', 120)
+      engine.setProperty('volume', 0.9)
+      # schedule.every(30).seconds.do(count)
+      # engine.say(f'total number of {count} person detected')
+      engine.save_to_file(f'{description} detected', 'Artificial Eye Sight.mp3')
+      engine.runAndWait()
+      FPS = 0
+      
+
+
+    else:
+      if FPS > 20:
+        FPS = 0
+      continue
+      # engine.say('Waiting for detected object')
+       # engine.setProperty('rate', 120)
+      # engine.setProperty('volume', 0.9)
+      # engine.runAndWait()
+      print(FPS)
+
+
+#     schedule.every(30).seconds.do(count)
+#     engine.say(f'total number of {coun} person detected')
+# # while 1:
+#         schedule.run_pending()
+#         time.sleep(1)
+    # if description == 'person':
+    #   a_set = set(description)
+    #   unique_values = len(a_set)
+    #   print(unique_values)
+
+    # myobj = gTTS(text=f'{description} detected', lang="en", slow=False)
+    # os.system('mpg321 object_detection.mp3')
+    # myobj.save("object_detection.mp3")
+    # engine = pyttsx3.init()
+    # engine.say(f'{description} detected')
+    # # engine.setProperty('rate', 120)
+    # engine.setProperty('volume', 0.9)
+    # engine.runAndWait()
+
+ # To calculate the frame number
+    # last = time.time()
+    # for i in range(0, 100):
+    #   print(FPS)
+    #   FPS += 1
+
+    #   if(FPS == 120):
+    #     break
+    # for i in range (0,100):
+    #   before = time.time()
+    #   # rval, frame = cap.read()
+    #   now = time.time()
+    #   print('time is' + str(now - before))
+    #   if (now - before >= 1):
+    #     print(FPS)
+    #     last = now
+    #     FPS = 0
+    #   else:
+    #     FPS += 1
+
+    
+
+
+# When everything done, release the 
+out.release()
+cap.release()
+cv2.destroyAllWindows()
+
+  
